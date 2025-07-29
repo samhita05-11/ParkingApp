@@ -242,7 +242,7 @@ def delete_lot(lot_id):
     db.session.commit()
     flash('Parking lot deleted.', 'success')
     return redirect(url_for('admin_dashboard'))
-
+#cost calc implmeneted along with previous milestone
 @app.before_first_request
 def create_tables():
     db.create_all()
