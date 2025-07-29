@@ -114,9 +114,21 @@ def logout():
     flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
 
+@app.route('/dashboard')
+@login_required
+def user_dashboard():
+    if current_user.is_admin:
+        return redirect(url_for('admin_dashboard'))
+        
+    lots = ParkingLot.query.all()
 
-
-
+    for lot in lots:
+        occupied_spots = ParkingSpot.query.filter_by(lot_id=lot.id, is_occupied=True).count()
+        lot.available_spots = lot.capacity - occupied_spots
+        
+    active_booking = Booking.query.filter_by(user_id=current_user.id, end_time=None).first()
+    
+    return render_template('user_dashboard.html', lots=lots, active_booking=active_booking)
 
 
 
