@@ -114,5 +114,94 @@ def logout():
     flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
 
+
+
+
+
+
+
+def admin_required(f):
+    @login_required
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_admin:
+            flash('You do not have permission to access this page.', 'danger')
+            return redirect(url_for('index'))
+        return f(*args, **kwargs)
+    decorated_function.__name__ = f.__name__
+    return decorated_function
+
+@app.route('/admin/dashboard')
+@admin_required
+def admin_dashboard():
+    lots = ParkingLot.query.all()
+    users = User.query.filter_by(is_admin=False).all()
+    spots = ParkingSpot.query.all()
+    return render_template('admin_dashboard.html', lots=lots, users=users, spots=spots)
+    
+@app.route('/admin/lot/new', methods=['GET', 'POST'])
+@admin_required
+def new_lot():
+    if request.method == 'POST':
+        name = request.form.get('name')
+        address = request.form.get('address')
+        capacity = int(request.form.get('capacity'))
+        price_per_hour = float(request.form.get('price_per_hour'))
+        
+        new_lot = ParkingLot(name=name, address=address, capacity=capacity, price_per_hour=price_per_hour)
+        db.session.add(new_lot)
+        db.session.flush()
+        
+        for i in range(1, capacity + 1):
+            spot = ParkingSpot(spot_number=f'S{i}', lot_id=new_lot.id)
+            db.session.add(spot)
+        
+        db.session.commit()
+        flash('New parking lot created successfully!', 'success')
+        return redirect(url_for('admin_dashboard'))
+        
+    return render_template('lot_form.html', title="Create New Lot")
+
+@app.route('/admin/lot/edit/<int:lot_id>', methods=['GET', 'POST'])
+@admin_required
+def edit_lot(lot_id):
+    lot = ParkingLot.query.get_or_404(lot_id)
+    if request.method == 'POST':
+        
+        lot.name = request.form.get('name')
+        lot.address = request.form.get('address')
+        lot.price_per_hour = float(request.form.get('price_per_hour'))
+        db.session.commit()
+        flash('Parking lot updated.', 'success')
+        return redirect(url_for('admin_dashboard'))
+        
+    return render_template('lot_form.html', title="Edit Lot", lot=lot)
+
+@app.route('/admin/lot/delete/<int:lot_id>', methods=['POST'])
+@admin_required
+def delete_lot(lot_id):
+    lot = ParkingLot.query.get_or_404(lot_id)
+    
+    occupied_spots = ParkingSpot.query.filter_by(lot_id=lot_id, is_occupied=True).count()
+    if occupied_spots > 0:
+        flash('Cannot delete lot with occupied spots.', 'danger')
+        return redirect(url_for('admin_dashboard'))
+    
+    db.session.delete(lot)
+    db.session.commit()
+    flash('Parking lot deleted.', 'success')
+    return redirect(url_for('admin_dashboard'))
+
+@app.before_first_request
+def create_tables():
+    db.create_all()
+    
+    if not User.query.filter_by(username='admin').first():
+        admin_pass = 'admin123'
+        hashed_pw = hash_password(admin_pass)
+        admin_user = User(username='admin', password=hashed_pw, is_admin=True)
+        db.session.add(admin_user)
+        db.session.commit()
+        print(f"Admin user created with username 'admin' and password '{admin_pass}'")
+
 if __name__ == '__main__':
     app.run(debug=True)
