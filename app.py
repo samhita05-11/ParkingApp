@@ -130,7 +130,47 @@ def user_dashboard():
     
     return render_template('user_dashboard.html', lots=lots, active_booking=active_booking)
 
+@app.route('/book/lot/<int:lot_id>')
+@login_required
+def book_spot(lot_id):
+    if Booking.query.filter_by(user_id=current_user.id, end_time=None).first():
+        flash('You already have an active booking.', 'warning')
+        return redirect(url_for('user_dashboard'))
 
+    available_spot = ParkingSpot.query.filter_by(lot_id=lot_id, is_occupied=False).first()
+    
+    if not available_spot:
+        flash('Sorry, no spots are available in this lot right now.', 'danger')
+        return redirect(url_for('user_dashboard'))
+
+    available_spot.is_occupied = True
+    new_booking = Booking(user_id=current_user.id, spot_id=available_spot.id, lot_id=lot_id)
+    db.session.add(new_booking)
+    db.session.commit()
+    
+    flash(f'Successfully booked Spot {available_spot.spot_number}!', 'success')
+    return redirect(url_for('user_dashboard'))
+
+@app.route('/release/booking/<int:booking_id>')
+@login_required
+def release_spot(booking_id):
+    booking = Booking.query.get_or_404(booking_id)
+    if booking.user_id != current_user.id:
+        flash('This is not your booking.', 'danger')
+        return redirect(url_for('user_dashboard'))
+        
+    booking.end_time = datetime.utcnow()
+
+    duration_seconds = (booking.end_time - booking.start_time).total_seconds()
+    duration_hours = duration_seconds / 3600
+    cost = duration_hours * booking.lot.price_per_hour
+    booking.total_cost = round(max(cost, booking.lot.price_per_hour / 2), 2)
+    
+    booking.spot.is_occupied = False
+    db.session.commit()
+    
+    flash(f'Spot released. Your total cost is ${booking.total_cost:.2f}', 'success')
+    return redirect(url_for('user_dashboard'))
 
 def admin_required(f):
     @login_required
